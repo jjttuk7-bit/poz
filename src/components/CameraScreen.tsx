@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
-import { Camera, RefreshCw, Eye, EyeOff, Sliders, Image, AlertTriangle, ArrowLeft, HelpCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, RefreshCw, Eye, EyeOff, Sliders, Image, AlertTriangle, ArrowLeft, HelpCircle, Play } from 'lucide-react';
 import { PoseTemplate } from '../types';
 
 interface CameraScreenProps {
@@ -19,7 +19,8 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
   const streamRef = useRef<MediaStream | null>(null);
 
   const [hasCamera, setHasCamera] = useState<boolean>(true);
-  const [cameraState, setCameraState] = useState<'requesting' | 'active' | 'denied' | 'error'>('requesting');
+  const [cameraState, setCameraState] = useState<'idle' | 'requesting' | 'active' | 'denied' | 'error'>('idle');
+  const [videoPlaying, setVideoPlaying] = useState<boolean>(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [opacity, setOpacity] = useState<number>(40); // 0 to 70
   const [guideVisible, setGuideVisible] = useState<boolean>(true);
@@ -38,72 +39,105 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
     'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=600'  // Group/outdoor beach
   ];
 
-  // Initialize camera streams
-  useEffect(() => {
-    let active = true;
-
-    async function setupCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        if (active) {
-          setHasCamera(false);
-          setCameraState('error');
-          setErrorMessage('카메라 미디어 입력을 지원하지 않는 브라우저입니다.');
-        }
-        return;
-      }
-
-      setCameraState('requesting');
-      
-      // Stop existing tracks
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: facingMode,
-            width: { ideal: 640 },
-            height: { ideal: 480 }
-          }
-        });
-
-        if (active) {
-          streamRef.current = stream;
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.onloadedmetadata = () => {
-              if (videoRef.current) {
-                videoRef.current.play().catch(e => console.log('Video play error:', e));
-              }
-            };
-          }
-          setCameraState('active');
-          setHasCamera(true);
-        }
-      } catch (err: any) {
-        console.warn('Camera request failure:', err);
-        if (active) {
-          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-            setCameraState('denied');
-          } else {
-            setCameraState('error');
-            setErrorMessage(`카메라를 켤 수 없습니다: ${err.message || '인식 불가'}`);
-          }
-        }
-      }
+  // Camera request — extracted so it can be invoked by an explicit user tap (iOS Safari requires gesture).
+  const requestCamera = useCallback(async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setHasCamera(false);
+      setCameraState('error');
+      setErrorMessage('카메라 미디어 입력을 지원하지 않는 브라우저입니다.');
+      return;
     }
 
-    setupCamera();
+    setCameraState('requesting');
+    setVideoPlaying(false);
+    setErrorMessage('');
 
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: facingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+        } catch (e) {
+          console.log('Initial play blocked, will retry after user gesture:', e);
+        }
+      }
+      setCameraState('active');
+      setHasCamera(true);
+    } catch (err: any) {
+      console.warn('Camera request failure:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraState('denied');
+        setErrorMessage('카메라 권한이 거부됐어요. 주소창 옆 자물쇠 아이콘 → 카메라 → 허용으로 바꿔주세요.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraState('error');
+        setErrorMessage('연결된 카메라를 찾지 못했어요. 외장 카메라라면 연결 후 다시 시도해주세요.');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setCameraState('error');
+        setErrorMessage('다른 앱이 카메라를 점유 중입니다. Zoom/Teams/다른 탭을 종료 후 다시 시도해주세요.');
+      } else if (err.name === 'OverconstrainedError') {
+        setCameraState('error');
+        setErrorMessage('요청한 카메라 사양을 지원하지 않습니다. 다른 카메라로 전환을 시도해보세요.');
+      } else {
+        setCameraState('error');
+        setErrorMessage(`카메라를 켤 수 없습니다: ${err.message || err.name || '알 수 없는 오류'}`);
+      }
+    }
+  }, [facingMode]);
+
+  // Auto-request on mount / when facingMode changes. iOS Safari may silently reject — the "탭해서 카메라 켜기" overlay handles that.
+  useEffect(() => {
+    requestCamera();
     return () => {
-      active = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
-  }, [facingMode]);
+  }, [requestCamera]);
+
+  // Detect actual video playback so the "tap to start" overlay can dismiss.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onPlaying = () => setVideoPlaying(true);
+    const onPause = () => setVideoPlaying(false);
+    v.addEventListener('playing', onPlaying);
+    v.addEventListener('pause', onPause);
+    return () => {
+      v.removeEventListener('playing', onPlaying);
+      v.removeEventListener('pause', onPause);
+    };
+  }, []);
+
+  // Manual start triggered by user tap — required on iOS Safari and some autoplay-restricted browsers.
+  const handleManualStart = async () => {
+    if (!streamRef.current || cameraState !== 'active') {
+      await requestCamera();
+    }
+    if (videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      try {
+        await videoRef.current.play();
+      } catch (e: any) {
+        setErrorMessage(`재생 차단: ${e.message || e.name}. 브라우저 설정에서 자동재생을 허용해주세요.`);
+      }
+    }
+  };
 
   // Flip front/back facing
   const handleFlipCamera = () => {
@@ -243,12 +277,33 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
       <div className="flex-1 w-full bg-[#050505]/20 flex items-center justify-center relative overflow-hidden">
         {cameraState === 'active' ? (
           /* Actual Interactive Video streaming */
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className={`w-full h-full object-cover select-none ${facingMode === 'user' ? '-scale-x-100' : ''}`}
-          />
+          <>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              autoPlay
+              className={`w-full h-full object-cover select-none bg-black ${facingMode === 'user' ? '-scale-x-100' : ''}`}
+            />
+            {/* Tap-to-start overlay — required on iOS Safari + browsers blocking autoplay */}
+            {!videoPlaying && (
+              <button
+                type="button"
+                onClick={handleManualStart}
+                className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/70 backdrop-blur-sm text-white cursor-pointer animate-pulse"
+              >
+                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-[#FF6B6B] to-[#8A2BE2] flex items-center justify-center shadow-2xl shadow-[#FF6B6B]/50 border-2 border-white/30">
+                  <Play className="w-9 h-9 text-white fill-white ml-1" />
+                </div>
+                <div className="text-center space-y-1 px-6">
+                  <p className="text-base font-extrabold tracking-tight">탭해서 카메라 켜기</p>
+                  <p className="text-[11px] text-white/70 leading-relaxed">
+                    iPhone / 일부 브라우저는 화면을 한 번 눌러야 카메라가 켜져요.
+                  </p>
+                </div>
+              </button>
+            )}
+          </>
         ) : (
           /* Simulator Backdrop with instructions */
           <div className="w-full h-full relative select-none">
@@ -261,28 +316,39 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
             />
             
             {/* Status alerts representing sandbox simulation */}
-            <div className="absolute bottom-28 left-4 right-4 bg-black/60 backdrop-blur-xl rounded-2xl p-4.5 border border-white/10 font-sans z-20 shadow-xl space-y-2">
+            <div className="absolute bottom-28 left-4 right-4 bg-black/70 backdrop-blur-xl rounded-2xl p-4 border border-white/10 font-sans z-20 shadow-xl space-y-3">
               <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5 animate-pulse" />
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
                 <div className="space-y-1">
                   <h4 className="text-xs font-bold text-white tracking-wide">
-                    {cameraState === 'requesting' ? '카메라 권한 요청 중...' : '시뮬레이터 카메라 연동 중'}
+                    {cameraState === 'requesting' ? '카메라 권한 요청 중…'
+                      : cameraState === 'denied' ? '카메라 권한이 차단됐어요'
+                      : cameraState === 'error' ? '카메라를 켤 수 없어요'
+                      : '카메라 대기 중'}
                   </h4>
-                  <p className="text-[11px] text-white/60 leading-relaxed">
-                    {cameraState === 'denied' 
-                      ? '보안 차단 또는 브라우저 iframe 제약으로 웹캠이 미연결되었습니다. 우측 테마 변경 또는 시뮬레이어 사진 교체 기능으로 원활히 테스트 하세요!'
-                      : '웹캠 부재 시 아래 샘플 이미지 순환이나 직접 파일 올리기로 인물 구도를 변경하며 셔터를 누르면, 인생샷 인생 점수가 분석됩니다.'}
+                  <p className="text-[11px] text-white/70 leading-relaxed">
+                    {errorMessage || '아래 버튼을 눌러 카메라를 시작하거나, 샘플 이미지로 미리보기 할 수 있어요.'}
                   </p>
                 </div>
               </div>
 
-              {/* Advanced buttons for testing if camera isn't active */}
-              <div className="flex flex-wrap gap-2 pt-1.5 border-t border-white/10 mt-2">
+              {/* Primary: retry camera button */}
+              <button
+                onClick={requestCamera}
+                disabled={cameraState === 'requesting'}
+                className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#FF6B6B] to-[#8A2BE2] text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-lg shadow-[#FF6B6B]/30 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 disabled:cursor-wait"
+              >
+                <Camera className="w-4 h-4" />
+                {cameraState === 'requesting' ? '연결 중…' : '카메라 다시 시도'}
+              </button>
+
+              {/* Secondary: simulator fallback */}
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/10">
                 <button
                   onClick={cycleSimulatorBackdrop}
                   className="flex-1 py-1.5 px-3 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold text-white/80 flex items-center justify-center gap-1 hover:bg-white/10 transition-colors"
                 >
-                  <RefreshCw className="w-3 h-3 text-[#FF6B6B]" /> 다른 모델 순환
+                  <RefreshCw className="w-3 h-3 text-[#FF6B6B]" /> 샘플 사진 순환
                 </button>
                 <label className="flex-1 py-1.5 px-3 rounded-lg bg-white/5 border border-white/10 text-[10px] font-bold text-white/80 flex items-center justify-center gap-1 hover:bg-white/10 transition-colors cursor-pointer text-center">
                   <Image className="w-3 h-3 text-emerald-400" /> 내 사진 올리기
