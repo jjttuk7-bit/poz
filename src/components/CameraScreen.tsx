@@ -4,7 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, RefreshCw, Eye, EyeOff, Sliders, Image, AlertTriangle, ArrowLeft, HelpCircle, Play } from 'lucide-react';
+import { Camera, RefreshCw, Eye, EyeOff, Image, AlertTriangle, ArrowLeft, Play } from 'lucide-react';
 import { PoseTemplate } from '../types';
 
 interface CameraScreenProps {
@@ -22,12 +22,11 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
   const [cameraState, setCameraState] = useState<'idle' | 'requesting' | 'active' | 'denied' | 'error'>('idle');
   const [videoPlaying, setVideoPlaying] = useState<boolean>(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  const [opacity, setOpacity] = useState<number>(40); // 0 to 70
   const [guideVisible, setGuideVisible] = useState<boolean>(true);
-  const [overlayMode, setOverlayMode] = useState<'silhouette' | 'photo'>(
-    pose.silhouettePath ? 'silhouette' : 'photo'
-  );
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  const GUIDE_OPACITY = 0.42;
+  const overlayMode: 'silhouette' | 'photo' = pose.silhouettePath ? 'silhouette' : 'photo';
 
   // Fallback simulator mode controls (for browser testing without cameras / blocked permissions)
   const [simulatorSource, setSimulatorSource] = useState<string>('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600');
@@ -364,173 +363,80 @@ export function CameraScreen({ pose, onBack, onCapture }: CameraScreenProps) {
           </div>
         )}
 
-        {/* Real photo translucent ghost overlay guide layer */}
+        {/* Photo overlay (when no silhouette available) */}
         {guideVisible && overlayMode === 'photo' && pose.imageUrl && (
-          <div 
-            className="absolute inset-x-0 top-0 bottom-0 pointer-events-none select-none z-15 mix-blend-normal transition-opacity duration-300"
-            style={{ opacity: opacity / 100 }}
+          <div
+            className="absolute inset-0 pointer-events-none select-none z-15 transition-opacity duration-300"
+            style={{ opacity: GUIDE_OPACITY }}
           >
-            <img 
+            <img
               referrerPolicy="no-referrer"
-              src={pose.imageUrl} 
-              alt="Pose alignment overlay" 
-              className="w-full h-full object-cover filter contrast-[1.05]"
+              src={pose.imageUrl}
+              alt=""
+              className="w-full h-full object-cover"
             />
           </div>
         )}
 
-        {/* Dynamic Template Silhouette overlay layers */}
-        {guideVisible && overlayMode === 'silhouette' && (
-          <div 
+        {/* Silhouette overlay — clean, no label */}
+        {guideVisible && overlayMode === 'silhouette' && pose.silhouettePath && (
+          <div
             className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-20"
-            style={{ opacity: opacity / 100 }}
+            style={{ opacity: GUIDE_OPACITY }}
           >
-            {/* Outline SVG container with glow pipeline */}
-            <div className="w-[280px] h-[360px] relative flex flex-col items-center justify-center bg-black/5 rounded-[40px] border border-white/10 shadow-inner">
-              {pose.silhouettePath ? (
-                <svg
-                  viewBox="0 0 200 200"
-                  className="w-full h-full max-h-[290px] drop-shadow-[0_0_12px_rgba(255,107,107,0.85)] filter"
-                >
-                  <path
-                    d={pose.silhouettePath}
-                    fill="none"
-                    stroke="#FF6B6B"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="animate-pulse-slow"
-                  />
-                </svg>
-              ) : (
-                <div className="h-44 w-full flex items-center justify-center">
-                  <span className="text-[120px] filter drop-shadow-[0_10px_20px_rgba(255,255,255,0.4)]">
-                    {pose.overlayEmoji}
-                  </span>
-                </div>
-              )}
-
-              {/* Floating align label helpers */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none mt-20">
-                <span className="px-3.5 py-1 text-[10px] font-extrabold tracking-wider bg-[#FF6B6B] text-white rounded-md shadow-lg border border-white/20 animate-bounce">
-                  ALIGN HERE
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Guide points rolling overlays bottom */}
-        {guideVisible && (
-          <div className="absolute top-18 left-4 right-4 bg-black/45 backdrop-blur-xl border border-white/10 rounded-xl p-3 pointer-events-none z-20">
-            <span className="text-[10px] text-[#FF6B6B] font-extrabold block mb-0.5">💡 구도 가이드라인 꿀팁</span>
-            <p className="text-[11px] text-white/90 leading-tight">
-              {pose.guidePoints[0]}
-            </p>
+            <svg
+              viewBox="0 0 200 200"
+              className="w-[70%] max-w-[300px] drop-shadow-[0_0_14px_rgba(255,107,107,0.7)]"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <path
+                d={pose.silhouettePath}
+                fill="none"
+                stroke="#FF6B6B"
+                strokeWidth="3.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
         )}
       </div>
 
-      {/* Floating Bottom Drawer Controls with glass backdrop */}
-      <div className="bg-[#050505]/70 border-t border-white/5 pb-6 pt-4 px-5 space-y-4 shrink-0 z-30 backdrop-blur-xl">
-        
-        {/* Guide Mode Toggle Tabs (Silhouette vs Actual Image Ghosting) */}
-        {pose.imageUrl && guideVisible && (
-          <div className="flex rounded-xl bg-white/5 p-1 border border-white/10 gap-1 text-[11px]">
-            <button
-              onClick={() => setOverlayMode('silhouette')}
-              className={`flex-1 py-1.5 rounded-lg font-bold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                overlayMode === 'silhouette' 
-                  ? 'bg-gradient-to-r from-[#FF6B6B] to-purple-600 text-white shadow-md' 
-                  : 'text-white/50 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5 text-[#FF6B6B]" /> 실루엣 라인 가이드
-            </button>
-            <button
-              onClick={() => setOverlayMode('photo')}
-              className={`flex-1 py-1.5 rounded-lg font-bold text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                overlayMode === 'photo' 
-                  ? 'bg-gradient-to-r from-[#FF6B6B] to-purple-600 text-white shadow-md' 
-                  : 'text-white/50 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Image className="w-3.5 h-3.5 text-emerald-400" /> 실제 사진 오버레이
-            </button>
-          </div>
-        )}
-
-        {/* Opacity control and guide Visibility toggle row */}
-        <div className="flex items-center justify-between gap-4 bg-white/5 p-3 rounded-2xl border border-white/10">
-          <div className="flex items-center gap-2 text-white/80">
-            <button
-              onClick={() => setGuideVisible(v => !v)}
-              className={`p-2 rounded-xl transition-all cursor-pointer ${
-                guideVisible 
-                  ? 'bg-[#FF6B6B]/20 text-[#FF6B6B] border border-[#FF6B6B]/30' 
-                  : 'bg-white/5 text-white/40 border border-transparent'
-              }`}
-            >
-              {guideVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            </button>
-            <span className="text-[11px] font-bold select-none">
-              {guideVisible ? '가이드 ON' : '가이드 OFF'}
-            </span>
-          </div>
-
-          {/* Opacity custom slider bar */}
-          <div className="flex-1 flex items-center gap-2">
-            <Sliders className="w-3.5 h-3.5 text-white/40 shrink-0" />
-            <input
-              type="range"
-              min="0"
-              max="90"
-              value={opacity}
-              onChange={(e) => setOpacity(Number(e.target.value))}
-              disabled={!guideVisible}
-              className="flex-1 accent-[#FF6B6B] h-1 bg-white/10 rounded-lg cursor-pointer disabled:opacity-30"
-            />
-            <span className="text-[11px] font-semibold text-white/50 font-mono w-8 text-right shrink-0">
-              {guideVisible ? `${opacity}%` : '-'}
-            </span>
-          </div>
-        </div>
-
-        {/* Shutter primary buttons zone */}
-        <div className="flex items-center justify-between px-3">
-          
-          {/* Flip / Cycle lens */}
+      {/* Bottom Controls — minimal: flip · shutter · guide on/off */}
+      <div className="bg-[#050505]/70 border-t border-white/5 pb-7 pt-5 px-6 shrink-0 z-30 backdrop-blur-xl">
+        <div className="flex items-center justify-between">
+          {/* Flip camera */}
           <button
             onClick={handleFlipCamera}
             disabled={cameraState !== 'active'}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:text-[#FF6B6B] transition-all text-white/70 cursor-pointer disabled:opacity-40"
-            title="카메라 전후면 전환"
+            className="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white/75 cursor-pointer disabled:opacity-40"
+            aria-label="전후면 카메라 전환"
           >
             <RefreshCw className="w-5 h-5" />
           </button>
 
-          {/* Core Shutter (Large, glowing pink) */}
-          <div className="relative flex items-center justify-center p-1 border-4 border-[#FF6B6B]/20 rounded-full">
-            <button
-              onClick={handleCapturePhoto}
-              className="w-16 h-16 rounded-full bg-gradient-to-tr from-[#FF6B6B] to-[#8A2BE2] hover:scale-105 active:scale-[0.93] transition-all flex items-center justify-center shadow-lg shadow-[#FF6B6B]/30 cursor-pointer border border-white/20"
-              title="사진 찍기"
-            >
-              <Camera className="w-7 h-7 text-white" />
-            </button>
-          </div>
-
-          {/* Guide Helper help dialog tips button */}
+          {/* Shutter */}
           <button
-            onClick={() => {
-              alert(`[가이드라인 안내]\n\n배경 속 핑크색 실루엣에 몸 혹은 얼굴의 영역을 정확하게 겹쳐보세요!\n\n카메라는 피사체 무릎 또는 허리선 높이로 맞추면 훨씬 더 역동적인 대세 샷을 잡을 수 있습니다.`);
-            }}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-white/5 border border-white/10 hover:bg-white/10 hover:text-amber-400 transition-all text-white/70 cursor-pointer"
-            title="조언 보기"
+            onClick={handleCapturePhoto}
+            className="w-[72px] h-[72px] rounded-full bg-gradient-to-tr from-[#FF6B6B] to-[#8A2BE2] active:scale-[0.92] transition-transform flex items-center justify-center shadow-xl shadow-[#FF6B6B]/40 ring-4 ring-white/20 cursor-pointer"
+            aria-label="사진 찍기"
           >
-            <HelpCircle className="w-5 h-5" />
+            <Camera className="w-8 h-8 text-white" strokeWidth={2} />
           </button>
 
+          {/* Guide overlay on/off */}
+          <button
+            onClick={() => setGuideVisible(v => !v)}
+            className={`w-12 h-12 flex items-center justify-center rounded-full border transition-all cursor-pointer ${
+              guideVisible
+                ? 'bg-[#FF6B6B]/15 border-[#FF6B6B]/40 text-[#FF6B6B]'
+                : 'bg-white/5 border-white/10 text-white/45'
+            }`}
+            aria-label={guideVisible ? '가이드 끄기' : '가이드 켜기'}
+            title={guideVisible ? '가이드 끄기' : '가이드 켜기'}
+          >
+            {guideVisible ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+          </button>
         </div>
       </div>
     </div>
