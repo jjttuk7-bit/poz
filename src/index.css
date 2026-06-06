@@ -1,0 +1,97 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-coral-100: #FFE6E6;
+  --color-coral-200: #FFC0C0;
+  --color-coral-300: #FF9B9B;
+  --color-coral-400: #FF6E6E;
+  --color-coral-500: #FF3E3E;
+  --color-coral-600: #D82222;
+  --color-coral-750: #A21111;
+  --color-coral-950: #1B0202;
+
+  --font-logo: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Custom layout global defaults */
+body {
+  background-color: #0a0a0a;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar utility across other elements */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Soft pulsating scanner glows */
+@keyframes pulseSlow {
+  0%, 100% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.025);
+  }
+}
+
+@keyframes bounceSlow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes shadowPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0px rgba(236, 72, 153, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(236, 72, 153, 0);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 3s infinite ease-in-out;
+}
+
+.animate-bounce-slow {
+  animation: bounceSlow 4s infinite ease-in-out;
+}
+
+.animate-shadow-pulse {
+  animation: shadowPulse 2s infinite ease-in-out;
+}
+
+/* Smooth range slider track tailoring */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FF3366;
+  border: 2px solid #ffffff;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(255, 51, 102, 0.7);
+  transition: transform 0.15s ease-in-out;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}

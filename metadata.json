@@ -1,0 +1,8 @@
+{
+  "name": "POZI",
+  "description": "포즈 가이드를 보며 완벽한 각도의 인생샷을 촬영해 보세요! 커플, 솔로, 여행 등 다양한 포즈 가이드 수록.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
