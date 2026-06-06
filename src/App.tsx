@@ -72,7 +72,8 @@ export default function App() {
       return updated;
     });
     setSelectedPose(newPose);
-    setScreen('detail');
+    // Skip detail — go straight to camera with the new overlay.
+    setScreen('camera');
   };
 
   // Screen selection change handler
@@ -132,7 +133,7 @@ export default function App() {
         return (
           <CameraScreen
             pose={selectedPose}
-            onBack={() => setScreen('detail')}
+            onBack={() => setScreen('browse')}
             onCapture={handleCapturePhoto}
           />
         );
